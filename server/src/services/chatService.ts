@@ -9,6 +9,9 @@ export interface ChatMessage {
   content: string;
   message_type: string;
   file_url: string | null;
+  file_name?: string | null;
+  file_size?: number | null;
+  file_mime_type?: string | null;
   created_at: string;
 }
 
@@ -19,7 +22,8 @@ export function saveMessage(
   senderName: string,
   content: string,
   messageType: string = 'text',
-  fileUrl?: string
+  fileUrl?: string,
+  fileMeta?: { fileName?: string; fileSize?: number; fileMimeType?: string }
 ): ChatMessage {
   const db = getDb();
   const message: ChatMessage = {
@@ -31,6 +35,9 @@ export function saveMessage(
     content,
     message_type: messageType,
     file_url: fileUrl || null,
+    file_name: fileMeta?.fileName || null,
+    file_size: fileMeta?.fileSize || null,
+    file_mime_type: fileMeta?.fileMimeType || null,
     created_at: new Date().toISOString(),
   };
   db.chat_messages.push(message);

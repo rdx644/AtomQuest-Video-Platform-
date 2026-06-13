@@ -10,7 +10,22 @@ export interface DbSchema {
   session_events: any[];
   chat_messages: any[];
   recordings: any[];
+  files: FileRecord[];
   _meta: { nextEventId: number; nextMessageId: number };
+}
+
+export interface FileRecord {
+  id: string;
+  session_id: string;
+  uploader_id: string;
+  uploader_name: string;
+  uploader_role: string;
+  original_name: string;
+  stored_name: string;
+  mime_type: string;
+  size_bytes: number;
+  url: string;
+  created_at: string;
 }
 
 let db: DbSchema | null = null;
@@ -28,6 +43,7 @@ function getDefaultDb(): DbSchema {
     session_events: [],
     chat_messages: [],
     recordings: [],
+    files: [],
     _meta: { nextEventId: 1, nextMessageId: 1 },
   };
 }
@@ -44,6 +60,8 @@ export function getDb(): DbSchema {
     try {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
       db = JSON.parse(raw);
+      db!.files ||= [];
+      db!._meta ||= { nextEventId: 1, nextMessageId: 1 };
       return db!;
     } catch {
       console.warn('⚠️  Failed to parse database file, starting fresh');

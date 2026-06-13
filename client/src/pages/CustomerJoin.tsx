@@ -11,40 +11,78 @@ export default function CustomerJoin() {
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) { setError('Please enter your name'); return; }
-    setLoading(true); setError('');
+    if (!name.trim()) {
+      setError('Please enter your name');
+      return;
+    }
+    setLoading(true);
+    setError('');
     try {
       const data = await api.joinSession(token!, name.trim());
       localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify({
-        userId: `customer-${Date.now()}`, username: name.toLowerCase().replace(/\s+/g,'-'),
-        displayName: name.trim(), role: 'customer', sessionId: data.session.id
-      }));
+      localStorage.setItem('user', JSON.stringify(data.user));
       navigate(`/call/${data.session.id}`);
-    } catch (err: any) { setError(err.message || 'Failed to join'); }
-    finally { setLoading(false); }
+    } catch (err: any) {
+      setError(err.message || 'Failed to join');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="page-centered">
-      <div className="card join-card" style={{ animation: 'fadeIn 0.5s ease' }}>
-        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📹</div>
-        <h1>Join Support Session</h1>
-        <p className="subtitle">You've been invited to a video support call. Enter your name to join.</p>
-        <form className="join-form" onSubmit={handleJoin}>
-          <div className="input-group">
-            <label htmlFor="customerName">Your Name</label>
-            <input id="customerName" className="input" type="text" value={name} onChange={e=>setName(e.target.value)}
-              placeholder="Enter your name" required autoFocus />
-          </div>
-          {error && <p style={{ color: 'var(--danger)', fontSize: '0.875rem' }}>⚠️ {error}</p>}
-          <button type="submit" className="btn btn-primary btn-lg" disabled={loading} style={{ width: '100%' }}>
-            {loading ? <span className="spinner"/> : '🎥 Join Video Call'}
-          </button>
-        </form>
-        <p style={{ marginTop: '1.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-          No download required • Works in your browser • Your camera & mic will be requested
-        </p>
+      <div className="card join-card" style={{ animation: 'fadeIn 0.45s ease' }}>
+        <div className="auth-layout">
+          <section className="auth-visual">
+            <div className="auth-visual-content">
+              <div className="brand-lockup">
+                <div className="brand-mark">AQ</div>
+                <div>
+                  <div className="eyebrow">Secure invite</div>
+                  <strong>AtomQuest Video</strong>
+                </div>
+              </div>
+              <h1>Join your support session.</h1>
+              <p>
+                Your support agent will see your camera feed only after you grant browser
+                permission. No app installation is required.
+              </p>
+            </div>
+            <div className="auth-checklist">
+              <div className="auth-check"><span>01</span><span>Enter the name your agent should see.</span></div>
+              <div className="auth-check"><span>02</span><span>Allow camera and microphone permissions.</span></div>
+              <div className="auth-check"><span>03</span><span>Use chat or file sharing during the call.</span></div>
+            </div>
+          </section>
+
+          <section className="auth-form-panel">
+            <div className="brand-mark">AQ</div>
+            <h2>Customer entry</h2>
+            <p className="subtitle">This link is valid only for the invited session.</p>
+            <form className="form-stack" onSubmit={handleJoin}>
+              <div className="input-group">
+                <label htmlFor="customerName">Your name</label>
+                <input
+                  id="customerName"
+                  className="input"
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Jane Customer"
+                  required
+                  autoFocus
+                />
+              </div>
+              {error && <p className="alert">Error: {error}</p>}
+              <button type="submit" className="btn btn-primary btn-lg" disabled={loading}>
+                {loading ? <span className="spinner" /> : 'Join Video Call'}
+              </button>
+            </form>
+            <p className="subtle" style={{ marginTop: '1.25rem' }}>
+              Browser-only call. Camera, microphone, chat, and file sharing are available inside the room.
+            </p>
+          </section>
+        </div>
       </div>
     </div>
   );

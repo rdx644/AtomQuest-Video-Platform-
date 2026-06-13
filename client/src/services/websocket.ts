@@ -17,7 +17,7 @@ export class WebSocketClient {
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const url = `${WS_BASE}?token=${this.token}&sessionId=${this.sessionId}`;
+      const url = `${WS_BASE}?token=${encodeURIComponent(this.token)}&sessionId=${encodeURIComponent(this.sessionId)}`;
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
@@ -36,15 +36,22 @@ export class WebSocketClient {
       };
 
       this.ws.onclose = (event) => {
-        console.log('🔴 WebSocket closed:', event.code);
-        this.emit('disconnected', { code: event.code });
+        console.log('🔴 WebSocket closed:', event.code, event.reason);
+        this.emit('disconnected', { code: event.code, reason: event.reason });
 
-        if (this.reconnectAttempts < this.maxReconnects && event.code !== 4001) {
+        // Don't reconnect on application-level close codes (4001=auth, 4002-4005=session errors, 4008=replaced)
+        const noReconnectCodes = [4001, 4002, 4003, 4004, 4005, 4008];
+        const shouldReconnect = this.reconnectAttempts < this.maxReconnects
+          && !noReconnectCodes.includes(event.code)
+          && event.code !== 1000; // Normal close
+
+        if (shouldReconnect) {
+          const delay = Math.min(2000 * Math.pow(1.5, this.reconnectAttempts), 15000);
           setTimeout(() => {
             this.reconnectAttempts++;
             console.log(`Reconnecting... (${this.reconnectAttempts}/${this.maxReconnects})`);
             this.connect().catch(() => {});
-          }, 2000 * this.reconnectAttempts);
+          }, delay);
         }
       };
 

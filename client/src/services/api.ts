@@ -1,5 +1,9 @@
-const API_BASE = 'http://localhost:3001/api';
-const WS_BASE = 'ws://localhost:3001/ws';
+const isProduction = import.meta.env.PROD;
+const API_BASE = import.meta.env.VITE_API_BASE || (isProduction ? '/api' : 'http://localhost:3001/api');
+const SERVER_BASE = API_BASE.startsWith('http') ? API_BASE.replace(/\/api\/?$/, '') : '';
+const WS_BASE = import.meta.env.VITE_WS_BASE || (isProduction
+  ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`
+  : `${SERVER_BASE.replace(/^http/, 'ws')}/ws`);
 
 export { WS_BASE };
 
@@ -9,15 +13,19 @@ function getToken(): string | null {
 
 async function request(endpoint: string, options: RequestInit = {}): Promise<any> {
   const token = getToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...((options.headers as Record<string, string>) || {}),
-  };
+  const headers: Record<string, string> = { ...((options.headers as Record<string, string>) || {}) };
+  if (options.body && !(options.body instanceof FormData) && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+  const contentType = res.headers.get('content-type') || '';
+  const data = contentType.includes('application/json') ? await res.json() : await res.text();
+  if (!res.ok) {
+    const message = typeof data === 'object' && data?.error ? data.error : 'Request failed';
+    throw new Error(message);
+  }
   return data;
 }
 
@@ -73,7 +81,14 @@ export const api = {
 
   getSessionFiles: (sessionId: string) => request(`/files/session/${sessionId}`),
 
+  getAssetUrl: (url: string) => {
+    const absoluteUrl = url.startsWith('http') ? url : `${SERVER_BASE}${url}`;
+    const token = getToken();
+    if (!token) return absoluteUrl;
+    const separator = absoluteUrl.includes('?') ? '&' : '?';
+    return `${absoluteUrl}${separator}token=${encodeURIComponent(token)}`;
+  },
+
   // Metrics (admin)
   getMetrics: () => request('/metrics'),
 };
-

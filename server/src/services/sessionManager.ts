@@ -1,6 +1,7 @@
 import { getDb, saveDb } from '../database';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
+import { getCustomerUserId } from './accessControl';
 
 export type SessionStatus = 'CREATED' | 'ACTIVE' | 'AGENT_WAITING' | 'ENDED';
 
@@ -101,17 +102,20 @@ export function getLiveSessions(): any[] {
 export function customerJoinSession(sessionId: string, customerName: string): Session | null {
   const session = getSession(sessionId);
   if (!session || session.status === 'ENDED') return null;
+  if (session.status === 'ACTIVE' && session.customer_name) return null;
 
+  const wasWaiting = session.status === 'AGENT_WAITING';
   clearGraceTimer(sessionId);
 
   session.status = 'ACTIVE';
   session.customer_name = customerName;
   if (!session.started_at) session.started_at = new Date().toISOString();
 
-  logEvent(sessionId, 'CUSTOMER_JOINED', 'customer', customerName);
+  logEvent(sessionId, wasWaiting ? 'CUSTOMER_REJOINED' : 'CUSTOMER_JOINED', 'customer', getCustomerUserId(sessionId), {
+    customerName,
+  });
   saveDb();
 
-  emitSessionEvent(sessionId, 'customer_joined', { customerName });
   return session;
 }
 
@@ -120,14 +124,16 @@ export function customerDisconnect(sessionId: string, customerName?: string): vo
   if (!session || session.status === 'ENDED') return;
 
   session.status = 'AGENT_WAITING';
-  logEvent(sessionId, 'CUSTOMER_DISCONNECTED', 'customer', customerName || 'unknown');
+  logEvent(sessionId, 'CUSTOMER_DISCONNECTED', 'customer', getCustomerUserId(sessionId), {
+    customerName: customerName || session.customer_name || 'Customer',
+    graceTimeoutSeconds: session.grace_timeout_seconds,
+  });
   saveDb();
 
-  emitSessionEvent(sessionId, 'customer_disconnected', { customerName });
   startGraceTimer(sessionId, session.grace_timeout_seconds);
 }
 
-export function endSession(sessionId: string, agentId: string): Session | null {
+export function endSession(sessionId: string, actorId: string, actorRole: string = 'agent'): Session | null {
   const session = getSession(sessionId);
   if (!session || session.status === 'ENDED') return null;
 
@@ -136,10 +142,16 @@ export function endSession(sessionId: string, agentId: string): Session | null {
   session.status = 'ENDED';
   session.ended_at = new Date().toISOString();
 
-  logEvent(sessionId, 'SESSION_ENDED', 'agent', agentId);
+  const durationSeconds = session.started_at
+    ? Math.max(0, Math.round((new Date(session.ended_at).getTime() - new Date(session.started_at).getTime()) / 1000))
+    : 0;
+
+  logEvent(sessionId, 'SESSION_ENDED', actorRole, actorId, {
+    durationSeconds,
+  });
   saveDb();
 
-  emitSessionEvent(sessionId, 'session_ended', { agentId });
+  emitSessionEvent(sessionId, 'session_ended', { actorId, actorRole, durationSeconds });
   return session;
 }
 
@@ -152,10 +164,16 @@ export function forceEndSession(sessionId: string, adminId: string): Session | n
   session.status = 'ENDED';
   session.ended_at = new Date().toISOString();
 
-  logEvent(sessionId, 'SESSION_FORCE_ENDED', 'admin', adminId);
+  const durationSeconds = session.started_at
+    ? Math.max(0, Math.round((new Date(session.ended_at).getTime() - new Date(session.started_at).getTime()) / 1000))
+    : 0;
+
+  logEvent(sessionId, 'SESSION_FORCE_ENDED', 'admin', adminId, {
+    durationSeconds,
+  });
   saveDb();
 
-  emitSessionEvent(sessionId, 'session_force_ended', { adminId });
+  emitSessionEvent(sessionId, 'session_force_ended', { adminId, durationSeconds });
   return session;
 }
 
@@ -164,8 +182,19 @@ function startGraceTimer(sessionId: string, timeoutSeconds: number): void {
   const timer = setTimeout(() => {
     const session = getSession(sessionId);
     if (session && session.status === 'AGENT_WAITING') {
-      logEvent(sessionId, 'GRACE_TIMEOUT_EXPIRED', 'system', 'system');
-      emitSessionEvent(sessionId, 'grace_timeout_expired', { sessionId });
+      const customerName = session.customer_name || 'Customer';
+      const customerUserId = getCustomerUserId(sessionId);
+      logEvent(sessionId, 'GRACE_TIMEOUT_EXPIRED', 'system', 'system', {
+        customerName,
+        customerUserId,
+      });
+      saveDb();
+      emitSessionEvent(sessionId, 'participant_left', {
+        userId: customerUserId,
+        role: 'customer',
+        displayName: customerName,
+      });
+      emitSessionEvent(sessionId, 'grace_timeout_expired', { sessionId, customerName, customerUserId });
     }
     graceTimers.delete(sessionId);
   }, timeoutSeconds * 1000);

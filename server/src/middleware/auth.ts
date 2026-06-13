@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import type { SignOptions } from 'jsonwebtoken';
 import { config } from '../config';
 
 export interface AuthPayload {
@@ -23,8 +24,9 @@ declare global {
  * Generate a JWT token for an authenticated user.
  */
 export function generateToken(payload: AuthPayload): string {
+  const expiresIn = (payload.role === 'customer' ? '4h' : config.jwtExpiresIn) as SignOptions['expiresIn'];
   return jwt.sign(payload, config.jwtSecret, {
-    expiresIn: payload.role === 'customer' ? '4h' : config.jwtExpiresIn,
+    expiresIn,
   });
 }
 

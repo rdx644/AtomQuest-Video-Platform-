@@ -44,9 +44,7 @@ async function main() {
     next();
   });
 
-  // Serve uploaded files and recordings
-  app.use('/uploads', express.static(uploadDir));
-  app.use('/recordings', express.static(recordingDir));
+  // Uploaded files and recordings should be exposed only through authenticated API routes.
 
   // 3. API Routes
   app.use('/api/auth', authRoutes);
@@ -73,6 +71,22 @@ async function main() {
   app.get('/api/metrics', (_req, res) => {
     res.json(getMetricsJSON());
   });
+
+  // --- Serve client build in production ---
+  const clientDistPath = path.join(__dirname, '..', '..', 'client', 'dist');
+  if (fs.existsSync(clientDistPath)) {
+    console.log('📦 Serving client build from', clientDistPath);
+    app.use(express.static(clientDistPath));
+    // All non-API routes fall through to React Router
+    app.get('*', (_req, res) => {
+      const indexPath = path.join(clientDistPath, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).send('Client build not found');
+      }
+    });
+  }
 
   // 4. Create HTTP server
   const server = http.createServer(app);

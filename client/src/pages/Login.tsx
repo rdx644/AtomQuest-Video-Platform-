@@ -12,40 +12,91 @@ export default function Login({ onLogin }: LoginProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(''); setLoading(true);
+    setError('');
+    setLoading(true);
     try {
       const data = await api.login(username, password);
-      onLogin({ userId: data.user.id, username: data.user.username, displayName: data.user.displayName, role: data.user.role }, data.token);
-    } catch (err: any) { setError(err.message || 'Login failed'); }
-    finally { setLoading(false); }
+      onLogin({
+        userId: data.user.id,
+        username: data.user.username,
+        displayName: data.user.displayName,
+        role: data.user.role,
+      }, data.token);
+    } catch (err: any) {
+      setError(err.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="page-centered">
-      <div className="card login-card" style={{ animation: 'fadeIn 0.5s ease' }}>
-        <div style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
-          <div style={{ width: 56, height: 56, background: 'var(--accent-gradient)', borderRadius: 'var(--radius-md)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.75rem', marginBottom: '1rem' }}>📹</div>
-        </div>
-        <h1>AtomQuest Video</h1>
-        <p className="subtitle">Real-Time Video Support Platform</p>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group input-group">
-            <label htmlFor="username">Username</label>
-            <input id="username" className="input" type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter your username" required autoFocus />
-          </div>
-          <div className="form-group input-group" style={{ marginTop: '1rem' }}>
-            <label htmlFor="password">Password</label>
-            <input id="password" className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter your password" required />
-          </div>
-          {error && <p style={{ color: 'var(--danger)', fontSize: '0.875rem', marginTop: '0.75rem' }}>⚠️ {error}</p>}
-          <button type="submit" className="btn btn-primary btn-lg login-btn" disabled={loading} style={{ marginTop: '1.5rem' }}>
-            {loading ? <span className="spinner" /> : 'Sign In'}
-          </button>
-        </form>
-        <div className="divider">Demo Credentials</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🧑‍💼 Agent</span><code style={{ color: 'var(--accent-primary)' }}>agent1 / password123</code></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🔧 Admin</span><code style={{ color: 'var(--accent-primary)' }}>admin / password123</code></div>
+      <div className="card login-card" style={{ animation: 'fadeIn 0.45s ease' }}>
+        <div className="auth-layout">
+          <section className="auth-visual" aria-label="AtomQuest platform overview">
+            <div className="auth-visual-content">
+              <div className="brand-lockup">
+                <div className="brand-mark">AQ</div>
+                <div>
+                  <div className="eyebrow">Owned video support</div>
+                  <strong>AtomQuest Video</strong>
+                </div>
+              </div>
+              <h1>Resolve what voice calls cannot show.</h1>
+              <p>
+                A browser-based support room for agent-led video calls, persisted chat,
+                session audit trails, file exchange, and admin oversight.
+              </p>
+            </div>
+            <div className="auth-checklist">
+              <div className="auth-check"><span>01</span><span>Agent creates a secure customer invite.</span></div>
+              <div className="auth-check"><span>02</span><span>Media routes through the application server.</span></div>
+              <div className="auth-check"><span>03</span><span>Session history remains queryable after the call.</span></div>
+            </div>
+          </section>
+
+          <section className="auth-form-panel">
+            <div className="brand-mark">AQ</div>
+            <h2>Sign in</h2>
+            <p className="subtitle">Use an agent or admin account to start the judging flow.</p>
+            <form className="form-stack" onSubmit={handleSubmit}>
+              <div className="input-group">
+                <label htmlFor="username">Username</label>
+                <input
+                  id="username"
+                  className="input"
+                  type="text"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  placeholder="agent1"
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className="input-group">
+                <label htmlFor="password">Password</label>
+                <input
+                  id="password"
+                  className="input"
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="password123"
+                  required
+                />
+              </div>
+              {error && <p className="alert">Error: {error}</p>}
+              <button type="submit" className="btn btn-primary btn-lg" disabled={loading}>
+                {loading ? <span className="spinner" /> : 'Sign In'}
+              </button>
+            </form>
+
+            <div className="demo-credentials">
+              <div className="eyebrow">Demo credentials</div>
+              <div className="credential-row"><span>Call Agent</span><code>agent1 / password123</code></div>
+              <div className="credential-row"><span>Operations Admin</span><code>admin / password123</code></div>
+            </div>
+          </section>
         </div>
       </div>
     </div>

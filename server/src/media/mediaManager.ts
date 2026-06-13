@@ -1,13 +1,9 @@
 /**
- * Server-side media signaling manager.
+ * Server-side media session manager.
  * 
- * Architecture: The server acts as a signaling relay and session controller.
- * All WebRTC negotiation (offers, answers, ICE candidates) passes through
- * the server, giving it full control and visibility over media sessions.
- * 
- * For production, a TURN server (e.g., coturn) would be deployed alongside
- * to relay the actual media streams through server infrastructure,
- * satisfying the "media must route through a server" requirement.
+ * Architecture: browser MediaRecorder chunks are sent to the WebSocket
+ * server and relayed to the other participant. This keeps media on owned
+ * infrastructure and avoids direct browser-to-browser peer connections.
  * 
  * The server enforces:
  * - Session ownership (only agents can create/end sessions)
@@ -35,11 +31,11 @@ export class MediaManager {
   private sessions = new Map<string, SessionMedia>();
 
   /**
-   * Initialize — no-op for signaling-only approach.
+   * Initialize the media relay state manager.
    */
   async initialize(): Promise<void> {
-    console.log('🎬 Media signaling manager initialized');
-    console.log('   Mode: WebRTC signaling relay (server-controlled)');
+    console.log('Media relay manager initialized');
+    console.log('   Mode: WebSocket media relay (server-routed)');
   }
 
   /**

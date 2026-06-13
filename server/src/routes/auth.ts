@@ -1,15 +1,9 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { getDb } from '../database';
-import { requireAuth } from '../middleware/auth';
-import { config } from '../config';
+import { generateToken, requireAuth } from '../middleware/auth';
 
 const router = Router();
-
-function generateToken(payload: any): string {
-  return jwt.sign(payload, config.jwtSecret, { expiresIn: '24h' });
-}
 
 /**
  * POST /api/auth/login

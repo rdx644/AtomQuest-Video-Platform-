@@ -3,9 +3,11 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { requireAuth } from '../middleware/auth';
-import { getDb, saveDb } from '../database';
+import { FileRecord, getDb, saveDb } from '../database';
 import * as sessionManager from '../services/sessionManager';
+import { canAccessSession } from '../services/accessControl';
 import { config } from '../config';
+import { incrementCounter } from '../services/metricsService';
 
 const router = Router();
 
@@ -32,14 +34,21 @@ const ALLOWED_TYPES = [
   'application/zip',
 ];
 
+const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.doc', '.docx', '.txt', '.zip']);
+
+function safeOriginalName(name: string): string {
+  return path.basename(name).replace(/[^\w.\- ()]/g, '_').slice(0, 180) || 'uploaded-file';
+}
+
 const upload = multer({
   storage,
   limits: { fileSize: config.maxFileSize },
   fileFilter: (_req, file, cb) => {
-    if (ALLOWED_TYPES.includes(file.mimetype)) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ALLOWED_TYPES.includes(file.mimetype) && ALLOWED_EXTENSIONS.has(ext)) {
       cb(null, true);
     } else {
-      cb(new Error(`File type ${file.mimetype} is not allowed`));
+      cb(new Error(`File type ${file.mimetype || ext || 'unknown'} is not allowed`));
     }
   },
 });
@@ -68,7 +77,7 @@ router.post('/upload', requireAuth, (req: Request, res: Response): void => {
       return;
     }
 
-    const sessionId = req.body.sessionId;
+    const sessionId = String(req.body.sessionId || '');
     if (!sessionId) {
       // Clean up uploaded file
       fs.unlinkSync(req.file.path);
@@ -83,26 +92,33 @@ router.post('/upload', requireAuth, (req: Request, res: Response): void => {
       res.status(400).json({ error: 'Session not found or has ended' });
       return;
     }
+    if (!canAccessSession(req.user!, session)) {
+      fs.unlinkSync(req.file.path);
+      res.status(403).json({ error: 'Access denied for this session' });
+      return;
+    }
 
     // Store file metadata in database
     const db = getDb();
-    const fileRecord = {
-      id: `file-${Date.now()}`,
+    const fileRecord: FileRecord = {
+      id: `file-${Date.now()}-${Math.round(Math.random() * 1e9)}`,
       session_id: sessionId,
       uploader_id: req.user!.userId,
       uploader_name: req.user!.displayName,
       uploader_role: req.user!.role,
-      original_name: req.file.originalname,
+      original_name: safeOriginalName(req.file.originalname),
       stored_name: req.file.filename,
       mime_type: req.file.mimetype,
       size_bytes: req.file.size,
-      url: `/uploads/${req.file.filename}`,
+      url: '',
       created_at: new Date().toISOString(),
     };
+    fileRecord.url = `/api/files/${fileRecord.id}/download`;
 
-    if (!db.files) db.files = [];
     db.files.push(fileRecord);
     saveDb();
+    incrementCounter('files_uploaded_total');
+    incrementCounter('files_uploaded_bytes_total', req.file.size);
 
     // Log the event
     sessionManager.logEvent(sessionId, 'FILE_UPLOADED', req.user!.role, req.user!.userId, {
@@ -130,10 +146,21 @@ router.post('/upload', requireAuth, (req: Request, res: Response): void => {
  * Get all files for a session.
  */
 router.get('/session/:sessionId', requireAuth, (req: Request, res: Response): void => {
+  const sessionId = String(req.params.sessionId);
+  const session = sessionManager.getSession(sessionId);
+  if (!session) {
+    res.status(404).json({ error: 'Session not found' });
+    return;
+  }
+  if (!canAccessSession(req.user!, session)) {
+    res.status(403).json({ error: 'Access denied for this session' });
+    return;
+  }
+
   const db = getDb();
-  const files = (db.files || [])
-    .filter((f: any) => f.session_id === req.params.sessionId)
-    .map((f: any) => ({
+  const files = db.files
+    .filter((f: FileRecord) => f.session_id === sessionId)
+    .map((f: FileRecord) => ({
       id: f.id,
       originalName: f.original_name,
       mimeType: f.mime_type,
@@ -145,6 +172,39 @@ router.get('/session/:sessionId', requireAuth, (req: Request, res: Response): vo
     }));
 
   res.json({ files });
+});
+
+/**
+ * GET /api/files/:fileId/download
+ * Authenticated file retrieval scoped to the session record.
+ */
+router.get('/:fileId/download', requireAuth, (req: Request, res: Response): void => {
+  const file = getDb().files.find((f: FileRecord) => f.id === req.params.fileId);
+  if (!file) {
+    res.status(404).json({ error: 'File not found' });
+    return;
+  }
+
+  const session = sessionManager.getSession(file.session_id);
+  if (!session) {
+    res.status(404).json({ error: 'Session not found' });
+    return;
+  }
+  if (!canAccessSession(req.user!, session)) {
+    res.status(403).json({ error: 'Access denied for this file' });
+    return;
+  }
+
+  const uploadDir = path.join(__dirname, '..', '..', 'uploads');
+  const filePath = path.join(uploadDir, path.basename(file.stored_name));
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ error: 'Stored file missing' });
+    return;
+  }
+
+  res.setHeader('Content-Type', file.mime_type);
+  res.setHeader('Content-Disposition', `inline; filename="${file.original_name.replace(/"/g, '')}"`);
+  res.sendFile(filePath);
 });
 
 export default router;

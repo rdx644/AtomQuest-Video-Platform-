@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Database (generated at runtime)
+server/data/database.json
+
+# Uploaded files (user-generated)
+server/uploads/
+server/recordings/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+.vibecheck/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Vite
+client/.vite/

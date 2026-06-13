@@ -26,6 +26,8 @@ const counters: Record<string, number> = {
   auth_failures_total: 0,
   recording_started_total: 0,
   recording_stopped_total: 0,
+  media_chunks_relayed_total: 0,
+  media_relay_errors_total: 0,
 };
 
 // Timing histograms (store individual samples)
@@ -178,6 +180,17 @@ export function generateMetricsText(): string {
   lines.push(`chat_messages_total ${counters.chat_messages_total}`);
   lines.push('');
 
+  // --- Media relay metrics ---
+  lines.push('# HELP media_chunks_relayed_total Total server-routed media chunks relayed');
+  lines.push('# TYPE media_chunks_relayed_total counter');
+  lines.push(`media_chunks_relayed_total ${counters.media_chunks_relayed_total}`);
+  lines.push('');
+
+  lines.push('# HELP media_relay_errors_total Total media relay validation errors');
+  lines.push('# TYPE media_relay_errors_total counter');
+  lines.push(`media_relay_errors_total ${counters.media_relay_errors_total}`);
+  lines.push('');
+
   // --- File metrics ---
   lines.push('# HELP files_uploaded_total Total files uploaded');
   lines.push('# TYPE files_uploaded_total counter');
@@ -267,6 +280,10 @@ export function getMetricsJSON() {
     },
     chat: {
       totalMessages: counters.chat_messages_total,
+    },
+    mediaRelay: {
+      chunksRelayed: counters.media_chunks_relayed_total,
+      errors: counters.media_relay_errors_total,
     },
     files: {
       totalUploaded: counters.files_uploaded_total,

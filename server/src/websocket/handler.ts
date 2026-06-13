@@ -1,10 +1,15 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { Server as HttpServer } from 'http';
 import { authenticateWebSocket, AuthPayload } from '../middleware/auth';
+import { saveDb } from '../database';
 import * as sessionManager from '../services/sessionManager';
 import * as chatService from '../services/chatService';
 import { MediaManager } from '../media/mediaManager';
 import { incrementCounter } from '../services/metricsService';
+import { canAccessSession } from '../services/accessControl';
+import fs from 'fs';
+import path from 'path';
+import { config } from '../config';
 
 interface ConnectedClient {
   ws: WebSocket;
@@ -14,6 +19,10 @@ interface ConnectedClient {
 
 // Track all connected clients by session
 const sessionClients = new Map<string, Map<string, ConnectedClient>>();
+const MAX_MEDIA_CHUNK_CHARS = 2 * 1024 * 1024;
+
+// Active recording file streams keyed by sessionId
+const recordingStreams = new Map<string, fs.WriteStream>();
 
 let mediaManager: MediaManager | null = null;
 
@@ -64,6 +73,18 @@ function sendToUser(sessionId: string, userId: string, event: string, data: any)
   if (client) sendToClient(client, event, data);
 }
 
+function closeSessionRoom(sessionId: string, code: number, reason: string): void {
+  const room = sessionClients.get(sessionId);
+  if (!room) return;
+
+  room.forEach((client) => {
+    if (client.ws.readyState === WebSocket.OPEN) {
+      client.ws.close(code, reason);
+    }
+  });
+  sessionClients.delete(sessionId);
+}
+
 /**
  * Initialize WebSocket server.
  */
@@ -75,6 +96,9 @@ export function initWebSocket(server: HttpServer): void {
   // Listen for session events from the session manager
   sessionManager.onSessionEvent((sessionId, event, data) => {
     broadcastToSession(sessionId, event, data);
+    if (event === 'session_ended' || event === 'session_force_ended') {
+      setTimeout(() => closeSessionRoom(sessionId, 1000, 'Session ended'), 50);
+    }
   });
 
   wss.on('connection', (ws: WebSocket, req) => {
@@ -110,6 +134,12 @@ export function initWebSocket(server: HttpServer): void {
       ws.close(4004, 'Session ended');
       return;
     }
+    if (!canAccessSession(user, session)) {
+      incrementCounter('auth_failures_total');
+      ws.send(JSON.stringify({ event: 'error', data: { message: 'Access denied for this session' } }));
+      ws.close(4005, 'Access denied');
+      return;
+    }
 
     // Register the client
     const client: ConnectedClient = {
@@ -119,7 +149,16 @@ export function initWebSocket(server: HttpServer): void {
     };
 
     const room = getSessionRoom(sessionId);
+    const existingClient = room.get(user.userId);
+    if (existingClient && existingClient.ws.readyState === WebSocket.OPEN) {
+      sendToClient(existingClient, 'connection_replaced', { message: 'A newer connection joined this session' });
+      existingClient.ws.close(4008, 'Connection replaced');
+    }
     room.set(user.userId, client);
+    sessionManager.logEvent(sessionId, 'PARTICIPANT_CONNECTED', user.role, user.userId, {
+      displayName: user.displayName,
+    });
+    saveDb();
 
     // Register in media manager
     if (mediaManager) {
@@ -168,18 +207,26 @@ export function initWebSocket(server: HttpServer): void {
     ws.on('close', () => {
       console.log(`🔴 ${user.role}:${user.displayName} disconnected from session ${sessionId}`);
 
-      room.delete(user.userId);
+      const currentClient = room.get(user.userId);
+      if (currentClient?.ws !== ws) {
+        return;
+      }
 
-      // Notify others
-      broadcastToSession(sessionId, 'participant_left', {
-        userId: user.userId,
-        role: user.role,
+      room.delete(user.userId);
+      sessionManager.logEvent(sessionId, 'PARTICIPANT_DISCONNECTED', user.role, user.userId, {
         displayName: user.displayName,
       });
+      saveDb();
 
-      // If customer disconnected, trigger the custom timeout rule
+      // Customer drops are held for the grace window before notifying the other side.
       if (user.role === 'customer') {
         sessionManager.customerDisconnect(sessionId, user.displayName);
+      } else {
+        broadcastToSession(sessionId, 'participant_left', {
+          userId: user.userId,
+          role: user.role,
+          displayName: user.displayName,
+        });
       }
 
       // Clean up media manager
@@ -211,19 +258,61 @@ async function handleMessage(client: ConnectedClient, message: any): Promise<voi
       handleChatMessage(client, data);
       break;
 
-    // ========== WebRTC Signaling (Server-Relayed) ==========
+    // ========== Server-Routed Media Relay ==========
+    case 'media:stream-start':
+      broadcastToSession(client.sessionId, 'media:stream-start', {
+        fromUserId: client.user.userId,
+        fromDisplayName: client.user.displayName,
+        mimeType: data?.mimeType,
+      }, client.user.userId);
+      break;
+
+    case 'media:chunk':
+      if (!data || typeof data.chunk !== 'string' || data.chunk.length > MAX_MEDIA_CHUNK_CHARS) {
+        sendToClient(client, 'error', { message: 'Invalid media chunk' });
+        incrementCounter('media_relay_errors_total');
+        break;
+      }
+      broadcastToSession(client.sessionId, 'media:chunk', {
+        fromUserId: client.user.userId,
+        fromDisplayName: client.user.displayName,
+        mimeType: typeof data.mimeType === 'string' ? data.mimeType : 'video/webm',
+        sequence: Number.isFinite(data.sequence) ? data.sequence : 0,
+        chunk: data.chunk,
+      }, client.user.userId);
+      incrementCounter('media_chunks_relayed_total');
+
+      // Write to recording file if recording is active
+      if (mediaManager?.isRecording(client.sessionId)) {
+        const stream = recordingStreams.get(client.sessionId);
+        if (stream && !stream.destroyed) {
+          try {
+            const buf = Buffer.from(data.chunk, 'base64');
+            stream.write(buf);
+          } catch {}
+        }
+      }
+      break;
+
+    case 'media:stream-stop':
+      broadcastToSession(client.sessionId, 'media:stream-stop', {
+        fromUserId: client.user.userId,
+        fromDisplayName: client.user.displayName,
+      }, client.user.userId);
+      break;
+
+    // ========== WebRTC Signaling Relay ==========
     case 'webrtc:offer':
-      // Agent/Customer sends offer → relay to the other participant
+      // Relay the offer to all other participants in the session
       broadcastToSession(client.sessionId, 'webrtc:offer', {
         offer: data.offer,
         fromUserId: client.user.userId,
         fromDisplayName: client.user.displayName,
-        fromRole: client.user.role,
       }, client.user.userId);
       break;
 
     case 'webrtc:answer':
-      // Relay answer to the offering participant
+      // If a specific recipient is specified, send only to them; otherwise broadcast
       if (data.toUserId) {
         sendToUser(client.sessionId, data.toUserId, 'webrtc:answer', {
           answer: data.answer,
@@ -238,18 +327,11 @@ async function handleMessage(client: ConnectedClient, message: any): Promise<voi
       break;
 
     case 'webrtc:ice-candidate':
-      // Relay ICE candidates to other participants
-      if (data.toUserId) {
-        sendToUser(client.sessionId, data.toUserId, 'webrtc:ice-candidate', {
-          candidate: data.candidate,
-          fromUserId: client.user.userId,
-        });
-      } else {
-        broadcastToSession(client.sessionId, 'webrtc:ice-candidate', {
-          candidate: data.candidate,
-          fromUserId: client.user.userId,
-        }, client.user.userId);
-      }
+      // Relay ICE candidates to all other participants
+      broadcastToSession(client.sessionId, 'webrtc:ice-candidate', {
+        candidate: data.candidate,
+        fromUserId: client.user.userId,
+      }, client.user.userId);
       break;
 
     // ========== Call Control Events ==========
@@ -267,7 +349,26 @@ async function handleMessage(client: ConnectedClient, message: any): Promise<voi
 
     case 'call:end':
       if (client.user.role === 'agent' || client.user.role === 'admin') {
-        sessionManager.endSession(client.sessionId, client.user.userId);
+        sessionManager.endSession(client.sessionId, client.user.userId, client.user.role);
+      } else {
+        sendToClient(client, 'error', { message: 'Customers can leave the call, but only agents can end the session.' });
+      }
+      break;
+
+    case 'call:leave':
+      // Customer voluntarily leaves → session transitions to AGENT_WAITING with grace timer
+      if (client.user.role === 'customer') {
+        sessionManager.customerDisconnect(client.sessionId, client.user.displayName);
+        sessionManager.logEvent(client.sessionId, 'CUSTOMER_LEFT', 'customer', client.user.userId, {
+          displayName: client.user.displayName,
+          voluntary: true,
+        });
+        saveDb();
+        broadcastToSession(client.sessionId, 'participant_left', {
+          userId: client.user.userId,
+          role: 'customer',
+          displayName: client.user.displayName,
+        }, client.user.userId);
       }
       break;
 
@@ -279,6 +380,22 @@ async function handleMessage(client: ConnectedClient, message: any): Promise<voi
       }
       if (mediaManager) {
         mediaManager.startRecording(client.sessionId, client.user.userId);
+      }
+      // Create recording file on disk
+      try {
+        const recordDir = path.resolve(config.recordingDir);
+        fs.mkdirSync(recordDir, { recursive: true });
+        const filename = `recording-${client.sessionId.substring(0, 8)}-${Date.now()}.webm`;
+        const filepath = path.join(recordDir, filename);
+        const stream = fs.createWriteStream(filepath);
+        recordingStreams.set(client.sessionId, stream);
+        sessionManager.logEvent(client.sessionId, 'RECORDING_STARTED', 'agent', client.user.userId, {
+          filename,
+          filepath,
+        });
+        saveDb();
+      } catch (err) {
+        console.error('Failed to create recording file:', err);
       }
       broadcastToSession(client.sessionId, 'recording:started', {
         startedBy: client.user.displayName,
@@ -294,6 +411,14 @@ async function handleMessage(client: ConnectedClient, message: any): Promise<voi
       if (mediaManager) {
         mediaManager.stopRecording(client.sessionId);
       }
+      // Close the recording file stream
+      const recStream = recordingStreams.get(client.sessionId);
+      if (recStream && !recStream.destroyed) {
+        recStream.end();
+        recordingStreams.delete(client.sessionId);
+        sessionManager.logEvent(client.sessionId, 'RECORDING_STOPPED', 'agent', client.user.userId);
+        saveDb();
+      }
       broadcastToSession(client.sessionId, 'recording:stopped', {
         stoppedBy: client.user.displayName,
       });
@@ -308,7 +433,7 @@ async function handleMessage(client: ConnectedClient, message: any): Promise<voi
 // ========== Chat Handlers ==========
 
 function handleChatMessage(client: ConnectedClient, data: any): void {
-  const { content, messageType, fileUrl } = data;
+  const { content, messageType, fileUrl, fileName, fileSize, fileMimeType } = data;
 
   if (!content && !fileUrl) return;
 
@@ -320,7 +445,8 @@ function handleChatMessage(client: ConnectedClient, data: any): void {
     client.user.displayName,
     content || '',
     messageType || 'text',
-    fileUrl
+    fileUrl,
+    { fileName, fileSize, fileMimeType }
   );
 
   // Broadcast to all participants in the session (including sender for confirmation)
