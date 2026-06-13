@@ -57,7 +57,10 @@ function App() {
         <Route path="/join/:token" element={<CustomerJoin />} />
 
         {/* Call room — for both agent and customer */}
-        <Route path="/call/:sessionId" element={<CallRoom user={user} onLogout={handleLogout} />} />
+        <Route
+          path="/call/:sessionId"
+          element={user ? <CallRoom user={user} onLogout={handleLogout} /> : <Navigate to="/login" replace />}
+        />
 
         {/* Auth-protected routes */}
         {!user ? (
