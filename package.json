@@ -4,9 +4,9 @@
   "description": "Real-time video support platform — AtomQuest Hackathon 1.0",
   "private": true,
   "scripts": {
-    "install:all": "cd server && npm install --include=dev && cd ../client && npm install --include=dev",
-    "build": "cd client && npm run build && cd ../server && npm run build",
-    "start": "cd server && npm start",
+    "install:all": "npm install --prefix server --include=dev && npm install --prefix client --include=dev",
+    "build": "npm run build --prefix client && npm run build --prefix server",
+    "start": "npm start --prefix server",
     "dev": "echo 'Run server and client separately — see README.md'"
   },
   "engines": {
