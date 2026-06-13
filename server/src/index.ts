@@ -127,6 +127,16 @@ async function main() {
   // Wire up WS count to metrics service
   setWsCountFn(getConnectedParticipantsCount);
 
+  // Global Error Handler for debugging
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error('Unhandled Express Error:', err);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: err.message,
+      stack: err.stack,
+    });
+  });
+
   // 7. Start server
   server.listen(config.port, () => {
     console.log(`\n✅ Server running on http://localhost:${config.port}`);
