@@ -3,7 +3,6 @@
 A self-hosted, real-time video calling platform for customer support teams. Agents create sessions, invite customers via shareable links, conduct video-assisted support calls with chat, file sharing, and recording — all routed through the server on your own infrastructure.
 
 > **Live Demo:** [https://atomquest-video-platform-3.onrender.com/login](https://atomquest-video-platform-3.onrender.com/login)
-> **GitHub Repository:** [https://github.com/rdx644/AtomQuest-Video-Platform-](https://github.com/rdx644/AtomQuest-Video-Platform-)
 ---
 
 ## 🏗️ System Architecture
