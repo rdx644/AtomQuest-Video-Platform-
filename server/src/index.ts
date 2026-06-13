@@ -34,25 +34,7 @@ async function main() {
   ];
   app.use(cors({
     credentials: true,
-    origin: (origin, callback) => {
-      if (!origin) {
-        if (config.corsOrigin.includes('localhost') && process.env.NODE_ENV !== 'production') {
-          callback(null, true);
-          return;
-        }
-        callback(new Error('CORS origin required'));
-        return;
-      }
-      if (origin === 'null') {
-        callback(new Error('CORS origin not allowed'));
-        return;
-      }
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-        return;
-      }
-      callback(new Error('CORS origin not allowed'));
-    },
+    origin: true, // Reflects the request origin
   }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
