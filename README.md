@@ -2,8 +2,8 @@
 
 A self-hosted, real-time video calling platform for customer support teams. Agents create sessions, invite customers via shareable links, conduct video-assisted support calls with chat, file sharing, and recording — all routed through the server on your own infrastructure.
 
-> **Live Demo:** [Deployed URL — see Deployment section below]
-
+> **Live Demo:** [https://atomquest-video-platform-3.onrender.com/login](https://atomquest-video-platform-3.onrender.com/login)
+> **GitHub Repository:** [https://github.com/rdx644/AtomQuest-Video-Platform-](https://github.com/rdx644/AtomQuest-Video-Platform-)
 ---
 
 ## 🏗️ System Architecture
@@ -129,15 +129,10 @@ Our architecture uses `MediaRecorder` → base64 → WebSocket → server relay 
 ### 1. Clone & Install
 
 ```bash
-git clone <repo-url>
-cd atomquest-video-platform
+git clone https://github.com/rdx644/AtomQuest-Video-Platform-.git
+cd AtomQuest-Video-Platform-
 
-# Install server dependencies
-cd server
-npm install
-
-# Install client dependencies
-cd ../client
+# Install all dependencies (Client and Server) at once using npm workspaces
 npm install
 ```
 
