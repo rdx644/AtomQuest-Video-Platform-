@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Real-time video support platform — AtomQuest Hackathon 1.0",
   "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
   "scripts": {
     "install:all": "npm install --prefix server --include=dev && npm install --prefix client --include=dev",
     "build": "npm run build --prefix client && npm run build --prefix server",
