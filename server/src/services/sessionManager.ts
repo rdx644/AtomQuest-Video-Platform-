@@ -188,13 +188,13 @@ function startGraceTimer(sessionId: string, timeoutSeconds: number): void {
         customerName,
         customerUserId,
       });
-      saveDb();
       emitSessionEvent(sessionId, 'participant_left', {
         userId: customerUserId,
         role: 'customer',
         displayName: customerName,
       });
       emitSessionEvent(sessionId, 'grace_timeout_expired', { sessionId, customerName, customerUserId });
+      endSession(sessionId, customerUserId, 'customer');
     }
     graceTimers.delete(sessionId);
   }, timeoutSeconds * 1000);

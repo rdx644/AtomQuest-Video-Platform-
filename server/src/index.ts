@@ -28,7 +28,32 @@ async function main() {
 
   // 2. Create Express app
   const app = express();
-  app.use(cors({ origin: '*', credentials: true }));
+  const allowedOrigins = [
+    ...config.corsOrigin.split(',').map(origin => origin.trim()).filter(Boolean),
+    ...(config.publicOrigin ? [config.publicOrigin.trim()] : []),
+  ];
+  app.use(cors({
+    credentials: true,
+    origin: (origin, callback) => {
+      if (!origin) {
+        if (config.corsOrigin.includes('localhost') && process.env.NODE_ENV !== 'production') {
+          callback(null, true);
+          return;
+        }
+        callback(new Error('CORS origin required'));
+        return;
+      }
+      if (origin === 'null') {
+        callback(new Error('CORS origin not allowed'));
+        return;
+      }
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('CORS origin not allowed'));
+    },
+  }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 

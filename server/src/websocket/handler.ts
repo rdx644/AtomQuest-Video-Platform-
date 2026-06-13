@@ -220,7 +220,10 @@ export function initWebSocket(server: HttpServer): void {
 
       // Customer drops are held for the grace window before notifying the other side.
       if (user.role === 'customer') {
-        sessionManager.customerDisconnect(sessionId, user.displayName);
+        const currentSession = sessionManager.getSession(sessionId);
+        if (currentSession?.status === 'ACTIVE') {
+          sessionManager.customerDisconnect(sessionId, user.displayName);
+        }
       } else {
         broadcastToSession(sessionId, 'participant_left', {
           userId: user.userId,

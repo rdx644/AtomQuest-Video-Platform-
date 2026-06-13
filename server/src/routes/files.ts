@@ -14,7 +14,7 @@ const router = Router();
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
-    const uploadDir = path.join(__dirname, '..', '..', 'uploads');
+    const uploadDir = path.resolve(config.uploadDir);
     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
     cb(null, uploadDir);
   },
@@ -195,7 +195,7 @@ router.get('/:fileId/download', requireAuth, (req: Request, res: Response): void
     return;
   }
 
-  const uploadDir = path.join(__dirname, '..', '..', 'uploads');
+  const uploadDir = path.resolve(config.uploadDir);
   const filePath = path.join(uploadDir, path.basename(file.stored_name));
   if (!fs.existsSync(filePath)) {
     res.status(404).json({ error: 'Stored file missing' });

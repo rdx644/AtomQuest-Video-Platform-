@@ -17,6 +17,7 @@ function formatDate(value?: string | null) {
 export default function AdminDashboard({ user, onLogout }: Props) {
   const [liveSessions, setLiveSessions] = useState<any[]>([]);
   const [allSessions, setAllSessions] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'live' | 'history'>('live');
   const [error, setError] = useState('');
@@ -24,9 +25,10 @@ export default function AdminDashboard({ user, onLogout }: Props) {
 
   const load = async () => {
     try {
-      const [live, all] = await Promise.all([api.getLiveSessions(), api.getSessions()]);
+      const [live, all, metricData] = await Promise.all([api.getLiveSessions(), api.getSessions(), api.getMetrics()]);
       setLiveSessions(live.sessions || []);
       setAllSessions(all.sessions || []);
+      setMetrics(metricData);
       setError('');
     } catch (err: any) {
       setError(err.message || 'Unable to load admin data');
@@ -95,6 +97,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
           <div className="stat-card card"><div className="stat-value">{liveSessions.length}</div><div className="stat-label">Live Sessions</div></div>
           <div className="stat-card card"><div className="stat-value">{active.length}</div><div className="stat-label">Active Calls</div></div>
           <div className="stat-card card"><div className="stat-value">{ended.length}</div><div className="stat-label">Ended Sessions</div></div>
+          <div className="stat-card card"><div className="stat-value">{metrics?.connections?.current ?? 0}</div><div className="stat-label">Connected Participants</div></div>
         </div>
 
         <div className="section-header">
