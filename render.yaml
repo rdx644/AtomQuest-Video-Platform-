@@ -2,6 +2,7 @@ services:
   - type: web
     name: atomquest-video-platform
     runtime: node
+    plan: free
     buildCommand: npm run install:all && npm run build
     startCommand: npm start
     envVars:
@@ -9,5 +10,3 @@ services:
         value: production
       - key: JWT_SECRET
         generateValue: true
-      - key: PORT
-        value: 3001
