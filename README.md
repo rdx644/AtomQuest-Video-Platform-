@@ -195,7 +195,7 @@ npm run dev
 
 ## 📋 Features
 
-### Must-Have (Section 2)
+### Must-Have 
 | # | Feature | Status | Details |
 |---|---------|--------|---------|
 | 2.1 | Session Management | ✅ | Agent creates session → customer joins via invite token |
@@ -208,7 +208,7 @@ npm run dev
 | 2.4 | Role-based Auth | ✅ | JWT with agent/admin/customer roles, enforced on all endpoints |
 | 2.4 | Access Control | ✅ | Session-scoped customer tokens, role middleware, invite-only join |
 
-### Good-to-Have (Section 3)
+### Good-to-Have 
 | # | Feature | Status | Details |
 |---|---------|--------|---------|
 | 3.1 | Call Recording | ✅ | Agent-only start/stop, media chunks saved to `recordings/*.webm` |
